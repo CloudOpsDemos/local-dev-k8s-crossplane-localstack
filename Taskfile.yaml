@@ -1,0 +1,172 @@
+version: '3'
+
+tasks:
+  01-setup:
+    desc: "Ensure kind and kubectl are installed and ready to use"
+    cmds:
+      - |
+        if ! command -v kind &> /dev/null; then
+          echo "Kind is not installed. Installing kind..."
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+        else
+          echo "Kind is already installed."
+        fi
+      - |
+        if ! command -v kubectl &> /dev/null; then
+          echo "Kubectl is not installed. Installing kubectl..."
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x ./kubectl
+          sudo mv ./kubectl /usr/local/bin/kubectl
+        else
+          echo "Kubectl is already installed."
+        fi
+      - |
+        if ! command -v podman &> /dev/null; then
+          echo "Podman is not installed. Please install Podman manually."
+          exit 1
+        else
+          echo "Podman is installed: $(podman --version)"
+        fi
+
+  02-create-cluster:
+    desc: "Create a Kubernetes cluster using kind with Podman runtime"
+    vars:
+      cluster_name: '{{ default "platform" .cluster_name }}'
+    cmds:
+      - |
+        export KIND_EXPERIMENTAL_PROVIDER=podman
+        kind create cluster --name {{.cluster_name}} --config ./kind-cluster/cluster_config.yaml
+      - echo "Cluster '{{.cluster_name}}' created successfully using Podman!"
+
+  03-delete-cluster:
+    desc: "Delete the Kubernetes cluster"
+    vars:
+      cluster_name: '{{ default "platform" .cluster_name }}'
+    cmds:
+      - |
+        export KIND_EXPERIMENTAL_PROVIDER=podman
+        kind delete cluster --name {{.cluster_name}}
+      - echo "Cluster '{{.cluster_name}}' deleted successfully!"
+
+  04-install-ingress:
+    desc: "Install ingress-nginx to the cluster"
+    cmds:
+      - echo "Installing ingress-nginx..."
+      - kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+      - echo "Ingress-nginx installed successfully!"
+      - kubectl wait --namespace ingress-nginx --for=condition=available deployment/ingress-nginx-controller --timeout=60s
+      - echo "Ingress-nginx controller is ready!"
+
+  05-delete-ingress:
+    desc: "Delete ingress-nginx from the cluster"
+    cmds:
+      - echo "Deleting ingress-nginx..."
+      - kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml || echo "Ingress-nginx already deleted."
+      - echo "Ingress-nginx deleted successfully!"
+  
+  06-test-ingress:
+    desc: "Test ingress-nginx with a sample application"
+    cmds:
+      - echo "Deploying sample application..."
+      - kubectl apply -f ./tests/ingress-test/sample-app.yaml
+      - echo "Deploying ingress resource..."
+      - kubectl apply -f ./tests/ingress-test/ingress.yaml
+      - echo "Updating /etc/hosts to map test.local to 127.0.0.1..."
+      - |
+        if ! grep -q "127.0.0.1 test.local" /etc/hosts; then
+          echo "127.0.0.1 test.local" | sudo tee -a /etc/hosts
+        else
+          echo "Entry for test.local already exists in /etc/hosts."
+        fi
+      - echo "Testing ingress..."
+      - curl -s http://test.local:80 | grep -q "Welcome to nginx!" && echo "Ingress is working!" || echo "Ingress test failed!"
+
+  07-delete-ingress:
+    desc: "Delete ingress and sample application resources"
+    cmds:
+      - echo "Deleting ingress resource..."
+      - kubectl delete -f ./tests/ingress-test/ingress.yaml || echo "Ingress resource already deleted."
+      - echo "Deleting sample application..."
+      - kubectl delete -f ./tests/ingress-test/sample-app.yaml || echo "Sample application already deleted."
+      - echo "Sample application and ingress resources cleaned up successfully!"
+
+  08-add-argocd:
+    desc: "Add ArgoCD to the cluster"
+    cmds:
+      - echo "Installing ArgoCD..."
+      - |
+        kubectl create namespace argocd
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+      - echo "ArgoCD installed successfully!"
+      - kubectl port-forward svc/argocd-server -n argocd 38080:80 > /dev/null 2>&1 &
+      - |
+        if ! grep -q "127.0.0.1 argocd.local" /etc/hosts; then
+          echo "127.0.0.1 argocd.local" | sudo tee -a /etc/hosts
+        else
+          echo "Entry for argocd.local already exists in /etc/hosts."
+        fi
+      - echo "Access ArgoCD at http://argocd.local:38080"
+      - echo -e "Login to ArgoCD\nUsername - 'admin'\nPassword - run the following command:\nkubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath=\"{.data.password}\" | base64 -d\n"
+  
+  09-delete-argocd:
+    desc: "Delete ArgoCD from the cluster"
+    cmds:
+      - echo "Deleting argocd..."
+      - kubectl delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+      - kubectl delete namespace argocd
+      - echo "Argocd deleted successfully!"
+
+  # TODO: Separate the localstack and crossplane tasks
+  10-add-crossplane-localstack: ## Deploy localstack to act as a AWS provider
+    desc: "Add crossplane and localstack to the cluster"
+    cmds:
+      - echo "Deploying crossplane..."
+      - |
+        kubectl apply -f ./applications/app-crossplane.yaml; sleep 3 \
+        && kubectl apply -f ./crossplane/provider-aws.yaml; sleep 3 \
+        && kubectl apply -f ./applications/app-localstack.yaml; sleep 3 \
+        && kubectl apply -f ./localstack/localstack-aws-secret.yaml; sleep 3 \
+        && kubectl apply -f ./crossplane/providerconfig-crossplane-localstack.yaml
+      - echo "Crossplane localstack provider config deployed successfully!"
+
+  # TODO: Separate the localstack and crossplane tasks
+  11-delete-crossplane-localstack:
+    desc: "Delete crossplane and localstack from the cluster"
+    cmds:
+      - echo "Deleting crossplane..."
+      - kubectl delete -f ./crossplane/providerconfig-crossplane-localstack.yaml || echo "Crossplane localstack provider config already deleted."
+      - kubectl delete -f ./crossplane/provider-aws.yaml || echo "Crossplane AWS provider already deleted."
+      - kubectl delete -f ./localstack/localstack-aws-secret.yaml || echo "Localstack AWS secret already deleted."
+      - kubectl delete -f ./applications/app-crossplane.yaml || echo "Crossplane already deleted."
+      - kubectl delete -f ./localstack/app-localstack.yaml || echo "Localstack already deleted."
+      - kubectl delete namespace localstack || echo "localstack namespace already deleted."
+      - kubectl delete namespace crossplane-system || echo "crossplane-system namespace already deleted."
+      - echo "Crossplane and localstack deleted successfully!"
+
+  12-install-providers:
+    desc: "Install AWS providers"
+    cmds:
+      - echo "Installing AWS provider..."
+      - |
+        for provider in $(ls ./providers/*)
+        do
+          kubectl apply -f ${provider}
+        done
+      - echo "AWS providers installed successfully!"
+
+  13-add-test-app:
+    desc: "Deploy test application to the cluster"
+    cmds:
+      - echo "Deploying EC2 app..."
+      - kubectl apply -f ./applications/app-ec2.yaml
+      - echo "EC2 app deployed successfully!"
+
+  14-delete-test-app:
+    desc: "Delete test app EC2 app to the cluster"
+    cmds:
+      - echo "Deploying EC2 app..."
+      - kubectl delete -f ./applications/app-ec2.yaml
+      - kubectl delete namespace ec2-deployment
+      - echo "EC2 app deployed successfully!"
