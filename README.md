@@ -94,7 +94,8 @@ This repository includes a `Taskfile.yml` to automate common setup and managemen
 | **07-delete-ingress**              | Delete ingress and sample application resources.                            |
 | **08-add-argocd**                  | Add ArgoCD to the cluster.                                                  |
 | **09-delete-argocd**               | Delete ArgoCD from the cluster.                                             |
-| **10-add-crossplane-localstack**   | Add Crossplane and Localstack to the cluster.                               |
+| **10-1-add-crossplane-localstack** | Add Crossplane and Localstack to the cluster.                               |
+| **10-2-add-localstack-host-config**| Copy providers configuration files into host.                               |
 | **11-delete-crossplane-localstack**| Delete Crossplane from the cluster.                                         |
 | **12-install-providers**           | Install AWS provider for Crossplane.                                        |
 | **13-add-test-app**                | Deploy test app to the cluster.                                             |
