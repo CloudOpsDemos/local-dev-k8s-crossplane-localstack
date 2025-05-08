@@ -128,6 +128,7 @@ tasks:
         && kubectl apply -f ./crossplane/provider-aws.yaml; sleep 3 \
         && kubectl apply -f ./applications/app-localstack.yaml; sleep 3 \
         && kubectl apply -f ./localstack/localstack-aws-secret.yaml; sleep 3 \
+        && kubectl apply -f ./localstack/localstack-aws-ingress.yaml; sleep 3 \
         && kubectl apply -f ./crossplane/providerconfig-crossplane-localstack.yaml
       - echo "Crossplane localstack provider config deployed successfully!"
 
@@ -139,6 +140,7 @@ tasks:
       - kubectl delete -f ./crossplane/providerconfig-crossplane-localstack.yaml || echo "Crossplane localstack provider config already deleted."
       - kubectl delete -f ./crossplane/provider-aws.yaml || echo "Crossplane AWS provider already deleted."
       - kubectl delete -f ./localstack/localstack-aws-secret.yaml || echo "Localstack AWS secret already deleted."
+      - kubectl delete -f ./localstack/localstack-aws-ingress.yaml || echo "Localstack AWS ingress already deleted."
       - kubectl delete -f ./applications/app-crossplane.yaml || echo "Crossplane already deleted."
       - kubectl delete -f ./localstack/app-localstack.yaml || echo "Localstack already deleted."
       - kubectl delete namespace localstack || echo "localstack namespace already deleted."
