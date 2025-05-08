@@ -131,7 +131,7 @@ tasks:
         && kubectl apply -f ./crossplane/providerconfig-crossplane-localstack.yaml
       - echo "Crossplane localstack provider config deployed successfully!"
 
-  10-2-add-localstack-host-config: ## Copy providers configuration files into localhost
+  10-2-add-localstack-host-config: ## Copy providers configuration files into host
     desc: "Add provider configuration files to host home"
     cmds:
       - echo "Copy config files..."
