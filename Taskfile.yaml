@@ -119,7 +119,7 @@ tasks:
       - echo "Argocd deleted successfully!"
 
   # TODO: Separate the localstack and crossplane tasks
-  10-add-crossplane-localstack: ## Deploy localstack to act as a AWS provider
+  10-1-add-crossplane-localstack: ## Deploy localstack to act as a AWS provider
     desc: "Add crossplane and localstack to the cluster"
     cmds:
       - echo "Deploying crossplane..."
@@ -130,6 +130,15 @@ tasks:
         && kubectl apply -f ./localstack/localstack-aws-secret.yaml; sleep 3 \
         && kubectl apply -f ./crossplane/providerconfig-crossplane-localstack.yaml
       - echo "Crossplane localstack provider config deployed successfully!"
+
+  10-2-add-localstack-host-config: ## Copy providers configuration files into localhost
+    desc: "Add provider configuration files to host home"
+    cmds:
+      - echo "Copy config files..."
+      - |
+        mkdir -p ~/.aws
+        cp -r config/aws/host/* ~/.aws/
+      - echo "Copy was successful"
 
   # TODO: Separate the localstack and crossplane tasks
   11-delete-crossplane-localstack:
